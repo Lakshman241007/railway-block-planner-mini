@@ -1,0 +1,13 @@
+train_id,train_type,origin,destination,current_station,next_station,status,scheduled_arrival,scheduled_departure,actual_arrival,actual_departure
+G123,Goods,Chennai,Arakkonam,Chennai,AJJ,Running,09:30,09:35,09:32,09:37
+P204,Passenger,Chennai,Bengaluru,Chennai,KPD,Running,10:00,10:05,10:01,10:06
+G456,Goods,Arakkonam,Renigunta,AJJ,RU,Running,11:00,11:10,11:05,11:15
+P301,Passenger,Villupuram,Chennai,VM,TLGP,Running,07:00,07:05,07:02,07:08
+G789,Goods,Tambaram,Chengalpattu,TBM,CGL,Running,13:00,13:10,13:02,13:12
+P105,Passenger,Chennai,Villupuram,Chennai,TBM,Running,14:30,14:35,14:32,14:38
+G234,Goods,Renigunta,Arakkonam,RU,AJJ,Delayed,15:00,15:05,15:20,15:25
+P410,Passenger,Bengaluru,Chennai,KPD,AJJ,Running,16:00,16:05,16:00,16:05
+G567,Goods,Chennai,Tambaram,Chennai,TBM,Scheduled,18:00,18:05,,
+P602,Passenger,Chengalpattu,Chennai,CGL,TBM,Running,06:30,06:35,06:31,06:36
+G890,Goods,Arakkonam,Chennai,AJJ,Chennai,Terminated,20:00,20:05,20:10,20:15
+P715,Passenger,Chennai,Arakkonam,Perambur,AJJ,Running,08:00,08:05,08:03,08:08

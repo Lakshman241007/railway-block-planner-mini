@@ -1,0 +1,13 @@
+train_id,route_id,section,direction,movement_status,entry_time,exit_time,line
+G123,R-CHN-AJJ,Chennai-Perambur,Up,Occupied,09:30,09:40,Main
+G123,R-CHN-AJJ,Perambur-AJJ,Up,Approaching,09:40,10:10,Main
+P204,R-CHN-BLR,Chennai-KPD,Up,Occupied,10:00,10:45,Main
+P204,R-CHN-BLR,KPD-AJJ,Up,Clear,10:45,11:15,Main
+G456,R-AJJ-RU,AJJ-Walajah,Up,Occupied,11:00,11:30,Loop
+P301,R-VM-CHN,Villupuram-TLGP,Down,Occupied,07:00,07:40,Main
+G789,R-TBM-CGL,Tambaram-CGL,Up,Occupied,13:00,13:25,Main
+P105,R-CHN-VM,Chennai-TBM,Up,Clear,14:30,14:50,Main
+G234,R-RU-AJJ,Renigunta-Walajah,Down,Occupied,15:00,15:35,Main
+P410,R-BLR-CHN,KPD-AJJ,Down,Occupied,16:00,16:30,Main
+G567,R-CHN-TBM,Chennai-TBM,Up,Scheduled,18:00,18:20,Loop
+P602,R-CGL-CHN,CGL-TBM,Down,Occupied,06:30,06:50,Main

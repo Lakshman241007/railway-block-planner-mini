@@ -2,9 +2,23 @@
 # Railway Block Planner — Source Configuration
 # ==========================================================================
 # This file defines data-source connection details for each subsystem.
-# Phase 1 only includes SMMS (mock CSV).  Additional sources (TMS, TDMS,
-# COA, BDMS, timetable) will be added in later phases.
+# Phase 1 included SMMS only (mock CSV).  Phase 2 adds TMS, TDMS, COA,
+# BDMS, and Timetable sources — all using mock CSV data.
 # ==========================================================================
+
+tms:
+  source_type: mock_csv
+  file_path: data/raw/tms/mock_tms.csv
+  description: >
+    Train Management System — mock CSV data source containing
+    synthetic train movement records for prototype development.
+
+tdms:
+  source_type: mock_csv
+  file_path: data/raw/tdms/mock_tdms.csv
+  description: >
+    Train Data Management System — mock CSV data source containing
+    synthetic train/traffic operational data for prototype development.
 
 smms:
   source_type: mock_csv
@@ -13,3 +27,25 @@ smms:
     Section Maintenance Management System — mock CSV data source
     containing synthetic railway maintenance records for prototype
     development.
+
+coa:
+  source_type: mock_csv
+  file_path: data/raw/coa/mock_coa.csv
+  description: >
+    Control Office Application — mock CSV data source containing
+    synthetic corridor/section occupancy data for prototype development.
+
+bdms:
+  source_type: mock_csv
+  file_path: data/raw/bdms/mock_bdms.csv
+  description: >
+    Block Data Management System — mock CSV data source containing
+    synthetic block/disconnection planning records for prototype
+    development.
+
+timetable:
+  source_type: mock_csv
+  file_path: data/raw/timetable/mock_timetable.csv
+  description: >
+    Timetable data — mock CSV data source containing synthetic
+    scheduled train movement records for prototype development.

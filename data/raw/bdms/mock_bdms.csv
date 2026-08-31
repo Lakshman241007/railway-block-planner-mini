@@ -1,0 +1,13 @@
+block_id,location,block_type,requested_date,requested_start,requested_end,reason,priority,status
+BLK-001,Chennai-Arakkonam,Maintenance,2026-09-05,10:00,12:00,Track maintenance,High,Requested
+BLK-002,KM40-42,Emergency,2026-09-05,14:00,17:00,Rail fracture repair,Critical,Approved
+BLK-003,Arakkonam-Renigunta,Maintenance,2026-09-06,08:00,10:00,Bridge inspection,High,Requested
+BLK-004,Perambur Junction,Non-Interlocked,2026-09-06,09:30,11:00,Signal cable work,Medium,Requested
+BLK-005,KM85-87,Maintenance,2026-09-07,06:00,09:00,Track renewal,High,Approved
+BLK-006,Basin Bridge-Vyasarpadi,Emergency,2026-09-07,22:00,02:00,OHE repair,Critical,Approved
+BLK-007,Tambaram Junction,Non-Interlocked,2026-09-08,11:00,13:00,Point machine replacement,Medium,Requested
+BLK-008,Villupuram-Chengalpattu,Maintenance,2026-09-08,07:00,10:00,Track tamping,Low,Requested
+BLK-009,KM120 LC Gate,Traffic,2026-09-09,13:00,15:00,Level crossing repair,Medium,Approved
+BLK-010,Pamban Bridge Section,Maintenance,2026-09-10,05:00,10:00,Bridge structural inspection,Critical,Requested
+BLK-011,Chennai-Perambur,Non-Interlocked,2026-09-10,10:30,12:30,Signal testing,Low,Requested
+BLK-012,AJJ-Walajah,Maintenance,2026-09-11,06:00,08:00,Track grinding,High,Approved

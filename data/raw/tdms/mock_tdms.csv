@@ -1,0 +1,13 @@
+train_id,train_type,route_id,origin,destination,priority,status,expected_arrival,expected_departure
+G123,Goods,R-CHN-AJJ,Chennai,Arakkonam,High,Delayed,09:45,09:50
+P204,Passenger,R-CHN-BLR,Chennai,Bengaluru,Critical,Running,10:00,10:05
+G456,Goods,R-AJJ-RU,Arakkonam,Renigunta,Medium,Running,11:00,11:10
+P301,Passenger,R-VM-CHN,Villupuram,Chennai,High,Running,07:00,07:05
+G789,Goods,R-TBM-CGL,Tambaram,Chengalpattu,Low,Delayed,13:15,13:25
+P105,Passenger,R-CHN-VM,Chennai,Villupuram,Medium,Running,14:30,14:35
+G234,Goods,R-RU-AJJ,Renigunta,Arakkonam,High,Delayed,15:20,15:30
+P410,Passenger,R-BLR-CHN,Bengaluru,Chennai,Critical,Running,16:00,16:05
+G567,Goods,R-CHN-TBM,Chennai,Tambaram,Low,Scheduled,18:00,18:05
+P602,Passenger,R-CGL-CHN,Chengalpattu,Chennai,Medium,Running,06:30,06:35
+G890,Goods,R-AJJ-CHN,Arakkonam,Chennai,Low,Terminated,20:00,20:05
+P715,Passenger,R-CHN-AJJ,Chennai,Arakkonam,High,Running,08:00,08:05

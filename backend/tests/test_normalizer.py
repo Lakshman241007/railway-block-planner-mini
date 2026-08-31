@@ -152,3 +152,153 @@ class TestFieldMapping:
         assert result["equipment"] == "Tamping Machine"
         assert result["priority"] == "High"
         assert result["status"] == "Pending"
+
+
+# ===========================================================================
+# Phase 2 — TMS Normalizer Tests
+# ===========================================================================
+
+from backend.app.data_integration.normalizer import TMSNormalizer
+
+
+class TestTMSNormalizer:
+    """Tests for :class:`TMSNormalizer`."""
+
+    def test_normalize_tms_record(self) -> None:
+        normalizer = TMSNormalizer()
+        raw = {
+            "train_id": "G123",
+            "train_type": "Goods",
+            "origin": "Chennai",
+            "destination": "Arakkonam",
+            "current_station": "Chennai",
+            "next_station": "AJJ",
+            "status": "Running",
+            "scheduled_arrival": "09:30",
+            "scheduled_departure": "09:35",
+            "actual_arrival": "09:32",
+            "actual_departure": "09:37",
+        }
+        res = normalizer.normalize(raw)
+        assert res["train_id"] == "G123"
+        assert res["source"] == "tms"
+        assert res["status"] == "Running"
+
+
+# ===========================================================================
+# Phase 2 — TDMS Normalizer Tests
+# ===========================================================================
+
+from backend.app.data_integration.normalizer import TDMSNormalizer
+
+
+class TestTDMSNormalizer:
+    """Tests for :class:`TDMSNormalizer`."""
+
+    def test_normalize_tdms_record(self) -> None:
+        normalizer = TDMSNormalizer()
+        raw = {
+            "train_id": "G123",
+            "train_type": "Goods",
+            "route_id": "R-CHN-AJJ",
+            "origin": "Chennai",
+            "destination": "Arakkonam",
+            "priority": "High",
+            "status": "Delayed",
+            "expected_arrival": "09:45",
+            "expected_departure": "09:50",
+        }
+        res = normalizer.normalize(raw)
+        assert res["train_id"] == "G123"
+        assert res["route_id"] == "R-CHN-AJJ"
+        assert res["priority"] == "High"
+        assert res["source"] == "tdms"
+
+
+# ===========================================================================
+# Phase 2 — COA Normalizer Tests
+# ===========================================================================
+
+from backend.app.data_integration.normalizer import COANormalizer
+
+
+class TestCOANormalizer:
+    """Tests for :class:`COANormalizer`."""
+
+    def test_normalize_coa_record(self) -> None:
+        normalizer = COANormalizer()
+        raw = {
+            "train_id": "G123",
+            "route_id": "R-CHN-AJJ",
+            "section": "Chennai-Perambur",
+            "direction": "Up",
+            "movement_status": "Occupied",
+            "entry_time": "09:30",
+            "exit_time": "09:40",
+            "line": "Main",
+        }
+        res = normalizer.normalize(raw)
+        assert res["train_id"] == "G123"
+        assert res["section"] == "Chennai-Perambur"
+        assert res["source"] == "coa"
+
+
+# ===========================================================================
+# Phase 2 — BDMS Normalizer Tests
+# ===========================================================================
+
+from backend.app.data_integration.normalizer import BDMSNormalizer
+
+
+class TestBDMSNormalizer:
+    """Tests for :class:`BDMSNormalizer`."""
+
+    def test_normalize_bdms_record(self) -> None:
+        normalizer = BDMSNormalizer()
+        raw = {
+            "block_id": "BLK-001",
+            "location": "KM35-37",
+            "block_type": "Maintenance",
+            "requested_date": "2026-09-05",
+            "requested_start": "10:00",
+            "requested_end": "12:00",
+            "reason": "Track maintenance",
+            "priority": "High",
+            "status": "Requested",
+        }
+        res = normalizer.normalize(raw)
+        assert res["block_id"] == "BLK-001"
+        assert res["requested_date"] == date(2026, 9, 5)
+        assert res["source"] == "bdms"
+
+
+# ===========================================================================
+# Phase 2 — Timetable Normalizer Tests
+# ===========================================================================
+
+from backend.app.data_integration.normalizer import TimetableNormalizer
+
+
+class TestTimetableNormalizer:
+    """Tests for :class:`TimetableNormalizer`."""
+
+    def test_normalize_timetable_record(self) -> None:
+        normalizer = TimetableNormalizer()
+        raw = {
+            "train_id": "G123",
+            "service_date": "2026-09-05",
+            "station_code": "Chennai",
+            "arrival_time": "--",
+            "departure_time": "09:35",
+            "platform": "3",
+            "sequence": "1",
+        }
+        res = normalizer.normalize(raw)
+        assert res["train_id"] == "G123"
+        assert res["service_date"] == date(2026, 9, 5)
+        assert res["arrival_time"] is None
+        assert res["departure_time"] == "09:35"
+        assert res["platform"] == 3
+        assert res["sequence"] == 1
+        assert res["source"] == "timetable"
+

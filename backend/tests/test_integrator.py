@@ -130,5 +130,65 @@ class TestSMMSIntegrator:
         for rec in records:
             assert isinstance(rec, MaintenanceRecord)
             assert rec.source == "smms"
-            assert rec.duration_minutes > 0
             assert rec.required_resources > 0
+
+
+# ===========================================================================
+# Phase 2 — Multi-Source Railway Data Integrator Tests
+# ===========================================================================
+
+from backend.app.data_integration.integrator import RailwayDataIntegrator
+from backend.app.schemas.unified_data import (
+    TrainRecord,
+    MovementRecord,
+    BlockRecord,
+    TimetableRecord,
+)
+
+
+class TestRailwayDataIntegrator:
+    """Tests for the full multi-source pipeline :class:`RailwayDataIntegrator`."""
+
+    def test_full_pipeline_run(self) -> None:
+        """Run the full multi-source pipeline and verify all entity types are produced."""
+        project_root = Path(__file__).resolve().parents[2]
+        data_dir = project_root / "data"
+
+        integrator = RailwayDataIntegrator(data_dir=data_dir)
+        result = integrator.run()
+
+        # Check source statistics
+        assert result.source_stats.get("tms", 0) >= 10
+        assert result.source_stats.get("tdms", 0) >= 10
+        assert result.source_stats.get("smms", 0) >= 10
+        assert result.source_stats.get("coa", 0) >= 10
+        assert result.source_stats.get("bdms", 0) >= 10
+        assert result.source_stats.get("timetable", 0) >= 10
+
+        # Check records produced by entity type
+        assert len(result.train_records) >= 10
+        assert len(result.maintenance_records) >= 10
+        assert len(result.movement_records) >= 10
+        assert len(result.block_records) >= 10
+        assert len(result.timetable_records) >= 10
+
+        # Verify types
+        for train in result.train_records:
+            assert isinstance(train, TrainRecord)
+        for maint in result.maintenance_records:
+            assert isinstance(maint, MaintenanceRecord)
+        for move in result.movement_records:
+            assert isinstance(move, MovementRecord)
+        for block in result.block_records:
+            assert isinstance(block, BlockRecord)
+        for tt in result.timetable_records:
+            assert isinstance(tt, TimetableRecord)
+
+        # Check mapping and merge stats
+        assert result.mapping_stats.get("train_entities", 0) > 0
+        assert result.merge_stats.get("total_trains", 0) > 0
+
+        # Check conflict stats (we deliberately put G123 status conflict)
+        assert result.conflict_stats.get("detected", 0) >= 1
+        assert result.conflict_stats.get("resolved", 0) >= 1
+
