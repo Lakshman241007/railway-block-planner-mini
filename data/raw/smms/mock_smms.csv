@@ -1,0 +1,13 @@
+asset_id,asset_type,location,maintenance_type,maintenance_required,priority,required_duration,requested_date,preferred_start,required_resources,equipment,status
+TRK-1025,Track,Chennai-Arakkonam,Preventive,Yes,High,120,2026-09-05,10:00,8,Tamping Machine,Pending
+SIG-2041,Signal,Station_A,Inspection,Yes,Medium,60,2026-09-05,12:00,3,Signal Testing Kit,Pending
+TRK-1088,Track,KM40-42,Repair,Yes,Critical,180,2026-09-05,14:00,10,Tamping Machine,Pending
+BRG-3012,Bridge,Arakkonam-Renigunta,Inspection,Yes,High,90,2026-09-06,08:00,6,Bridge Inspection Unit,Pending
+SIG-2055,Signal,Perambur Junction,Preventive,Yes,Low,45,2026-09-06,09:30,2,Signal Testing Kit,Approved
+TRK-1102,Track,KM85-87,Preventive,Yes,Medium,150,2026-09-07,06:00,7,Rail Grinding Machine,Pending
+OHE-4001,OHE,Basin Bridge-Vyasarpadi,Repair,Yes,Critical,240,2026-09-07,22:00,12,OHE Maintenance Car,Pending
+PNT-5010,Points,Tambaram Junction,Inspection,Yes,High,75,2026-09-08,11:00,4,Point Machine Tester,Approved
+TRK-1130,Track,Villupuram-Chengalpattu,Preventive,No,Low,100,2026-09-08,07:00,5,Tamping Machine,Cancelled
+LVL-6020,Level Crossing,KM120 LC Gate,Repair,Yes,Medium,90,2026-09-09,13:00,3,Boom Barrier Kit,Pending
+BRG-3025,Bridge,Pamban Bridge Section,Inspection,Yes,Critical,300,2026-09-10,05:00,15,Bridge Inspection Unit,Pending
+SIG-2078,Signal,Egmore Station,Preventive,Yes,Low,30,2026-09-10,10:30,2,Signal Testing Kit,Completed

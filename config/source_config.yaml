@@ -1,0 +1,15 @@
+# ==========================================================================
+# Railway Block Planner — Source Configuration
+# ==========================================================================
+# This file defines data-source connection details for each subsystem.
+# Phase 1 only includes SMMS (mock CSV).  Additional sources (TMS, TDMS,
+# COA, BDMS, timetable) will be added in later phases.
+# ==========================================================================
+
+smms:
+  source_type: mock_csv
+  file_path: data/raw/smms/mock_smms.csv
+  description: >
+    Section Maintenance Management System — mock CSV data source
+    containing synthetic railway maintenance records for prototype
+    development.
