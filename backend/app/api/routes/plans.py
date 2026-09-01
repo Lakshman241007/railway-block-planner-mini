@@ -1,9 +1,9 @@
 """
-Plans API endpoints (Phase 3 Read-Only View).
+Plans API endpoints (Phase 3 Persistence View + Phase 4 Integrated Block Planner).
 
-Exposes persistent block planning records. Scheduling algorithms,
-conflict detection, and CP-SAT optimization are strictly deferred
-to Phase 4 and Phase 5.
+Exposes persistent block planning records and provides on-demand generation of
+integrated maintenance block plans using forecasting, heuristic scheduling,
+and conflict detection.
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from backend.app.api.dependencies import get_db
+from backend.app.block_planner.planner import BlockPlanner
+from backend.app.block_planner.schemas import BlockPlanRequest, BlockPlanResult
 from backend.app.database.repositories import BlockRepository
 
 router = APIRouter(prefix="/plans", tags=["Plans"])
@@ -21,7 +23,7 @@ router = APIRouter(prefix="/plans", tags=["Plans"])
 
 @router.get(
     "",
-    summary="Get planned maintenance blocks (Phase 3 Read-Only)",
+    summary="Get planned maintenance blocks (Phase 3 Persistence View)",
     response_description="List of persisted block plan requests",
 )
 def get_plans(
@@ -32,9 +34,6 @@ def get_plans(
 ) -> Dict[str, Any]:
     """
     Retrieve stored block planning requests from the database.
-
-    Note: This is a read-only database view for Phase 3. Automated block
-    scheduling and mathematical optimization will be added in Phase 4/5.
     """
     repo = BlockRepository(db)
     blocks = repo.get_all(status=status, skip=skip, limit=limit)
@@ -45,3 +44,22 @@ def get_plans(
         "count": len(blocks),
         "total": total_count,
     }
+
+
+@router.post(
+    "/generate",
+    summary="Generate Phase 4 integrated maintenance block plan",
+    response_model=BlockPlanResult,
+)
+def generate_block_plan(
+    request: Optional[BlockPlanRequest] = None,
+    db: Session = Depends(get_db),
+) -> BlockPlanResult:
+    """
+    Generate an end-to-end maintenance block plan orchestrating:
+    1. Goods train movement forecast with confidence scoring
+    2. Feasible maintenance slot scheduling
+    3. Spatial-temporal conflict detection and rule-based resolution recommendations
+    """
+    planner = BlockPlanner(db=db)
+    return planner.generate_plan(request=request or BlockPlanRequest())

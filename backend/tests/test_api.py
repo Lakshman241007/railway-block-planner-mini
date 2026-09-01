@@ -165,10 +165,95 @@ def test_get_block_by_id_success_and_404(test_client):
 
 
 def test_get_plans_endpoint(test_client):
-    """Test /api/plans returns read-only block view."""
+    """Test /api/plans returns persistence block view."""
     response = test_client.get("/api/plans")
     assert response.status_code == 200
     payload = response.json()
     assert "data" in payload
     assert "message" in payload
     assert payload["count"] > 0
+
+
+# ===========================================================================
+# Phase 4 API Tests
+# ===========================================================================
+
+def test_get_forecast_endpoint(test_client):
+    """Test GET /api/forecast returns forecasted goods movements."""
+    response = test_client.get("/api/forecast")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "forecasts" in payload
+    assert "total_trains_forecasted" in payload
+    assert payload["total_trains_forecasted"] >= 1
+    assert payload["average_confidence"] > 0.0
+
+
+def test_run_forecast_endpoint(test_client):
+    """Test POST /api/forecast/run with filters."""
+    response = test_client.post(
+        "/api/forecast/run",
+        json={"target_date": "2026-09-05", "horizon_hours": 12, "train_id": "G123"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "forecasts" in payload
+    assert all(fc["train_id"] == "G123" for fc in payload["forecasts"])
+
+
+def test_scheduler_feasible_slots_endpoint(test_client):
+    """Test POST /api/scheduler/feasible-slots finds valid slots."""
+    response = test_client.post(
+        "/api/scheduler/feasible-slots",
+        json={
+            "location": "Chennai-Arakkonam",
+            "duration_minutes": 60,
+            "preferred_start": "14:00",
+            "target_date": "2026-09-05",
+            "buffer_minutes": 15,
+        },
+    )
+    assert response.status_code == 200
+    slots = response.json()
+    assert isinstance(slots, list)
+    assert len(slots) > 0
+    assert slots[0]["duration_minutes"] == 60
+
+
+def test_scheduler_conflicts_endpoint(test_client):
+    """Test POST /api/scheduler/conflicts returns conflict report."""
+    response = test_client.post(
+        "/api/scheduler/conflicts?target_date=2026-09-05&buffer_minutes=15"
+    )
+    assert response.status_code == 200
+    report = response.json()
+    assert "total_conflicts" in report
+    assert "conflicts" in report
+    assert "is_conflict_free" in report
+
+
+def test_scheduler_schedule_endpoint(test_client):
+    """Test POST /api/scheduler/schedule generates schedule result."""
+    response = test_client.post(
+        "/api/scheduler/schedule",
+        json={"target_date": "2026-09-05", "buffer_minutes": 15},
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert "total_requested" in result
+    assert "scheduled_items" in result
+
+
+def test_plans_generate_endpoint(test_client):
+    """Test POST /api/plans/generate runs full Phase 4 BlockPlanner."""
+    response = test_client.post(
+        "/api/plans/generate",
+        json={"target_date": "2026-09-05", "include_forecast": True, "include_conflicts": True},
+    )
+    assert response.status_code == 200
+    plan = response.json()
+    assert "plan_id" in plan
+    assert "schedule" in plan
+    assert "conflict_report" in plan
+    assert "resolution_recommendations" in plan
+

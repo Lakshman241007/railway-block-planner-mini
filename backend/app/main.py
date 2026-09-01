@@ -1,7 +1,8 @@
 """
 FastAPI application for Railway Block Planner.
 
-Exposes REST APIs for interacting with persistent unified railway data.
+Exposes REST APIs for interacting with persistent unified railway data,
+goods train forecasting, maintenance slot scheduling, and conflict detection.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from backend.app.api.routes import blocks, maintenance, plans, trains
+from backend.app.api.routes import blocks, forecast, maintenance, plans, scheduler, trains
 from backend.app.database.connection import SessionLocal, init_db
 
 
@@ -29,10 +30,10 @@ app = FastAPI(
     title="Railway Block Planner API",
     description=(
         "Centralized railway maintenance block planning backend exposing "
-        "persisted unified operational entities across trains, maintenance requests, "
-        "movements, and blocks."
+        "persisted unified operational entities, goods train forecasting, "
+        "heuristic slot scheduling, and spatial-temporal conflict detection."
     ),
-    version="0.3.0",
+    version="0.4.0",
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
@@ -71,8 +72,8 @@ def health_check() -> Dict[str, Any]:
     return {
         "status": "ok" if db_status == "connected" else "degraded",
         "database": db_status,
-        "version": "0.3.0",
-        "phase": "Phase 3 - Database + Repositories + FastAPI",
+        "version": "0.4.0",
+        "phase": "Phase 4 - Forecast + Scheduler + Conflict Detection",
     }
 
 
@@ -81,10 +82,10 @@ def root() -> Dict[str, Any]:
     """Root metadata response."""
     return {
         "name": "Railway Block Planner API",
-        "version": "0.3.0",
+        "version": "0.4.0",
         "docs": "/docs",
         "health": "/health",
-        "phase": "Phase 3",
+        "phase": "Phase 4",
     }
 
 
@@ -95,3 +96,5 @@ app.include_router(trains.router, prefix="/api")
 app.include_router(maintenance.router, prefix="/api")
 app.include_router(blocks.router, prefix="/api")
 app.include_router(plans.router, prefix="/api")
+app.include_router(forecast.router, prefix="/api")
+app.include_router(scheduler.router, prefix="/api")
