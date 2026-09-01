@@ -17,6 +17,7 @@ from backend.app.api.dependencies import get_db
 from backend.app.block_planner.planner import BlockPlanner
 from backend.app.block_planner.schemas import BlockPlanRequest, BlockPlanResult
 from backend.app.database.repositories import BlockRepository
+from backend.app.optimizer.schemas import OptimizationRequest, OptimizationResult
 
 router = APIRouter(prefix="/plans", tags=["Plans"])
 
@@ -63,3 +64,23 @@ def generate_block_plan(
     """
     planner = BlockPlanner(db=db)
     return planner.generate_plan(request=request or BlockPlanRequest())
+
+
+@router.post(
+    "/optimize",
+    summary="Generate Phase 5 CP-SAT optimized maintenance block plan",
+    response_model=OptimizationResult,
+)
+def optimize_block_plan(
+    request: Optional[OptimizationRequest] = None,
+    db: Session = Depends(get_db),
+) -> OptimizationResult:
+    """
+    Generate a mathematically optimized maintenance block plan using OR-Tools CP-SAT:
+    1. Candidate slot generation across weekly/monthly horizon
+    2. Hard constraints (train movement protection, track non-overlap, equipment capacity)
+    3. Weighted multi-objective maximization (priority, throughput, minimal deviation)
+    """
+    planner = BlockPlanner(db=db)
+    return planner.optimize_plan(request=request or OptimizationRequest())
+

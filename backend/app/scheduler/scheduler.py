@@ -8,7 +8,7 @@ active track movements, and goods train forecasts.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 import logging
 from typing import Dict, List, Optional, Set, Tuple, Union
 
@@ -63,9 +63,32 @@ def _parse_time_to_minutes(time_val: Union[str, time, None]) -> Optional[int]:
         return None
 
 
+def _calculate_duration_minutes(
+    start_val: Union[str, time, None],
+    end_val: Union[str, time, None],
+    default_start: int = 480,
+    default_end: int = 600,
+) -> int:
+    """
+    Calculate required duration in minutes, correctly handling overnight spans
+    where end time is numerically earlier than start time (crossing midnight).
+    """
+    start_m = _parse_time_to_minutes(start_val)
+    if start_m is None:
+        start_m = default_start
+    end_m = _parse_time_to_minutes(end_val)
+    if end_m is None:
+        end_m = default_end
+
+    if end_m < start_m:
+        end_m += 1440
+    dur = end_m - start_m
+    return max(30, dur)
+
+
 def _format_minutes_to_time(minutes: int) -> str:
-    """Convert minutes from midnight to HH:MM format."""
-    norm = max(0, min(1439, minutes))
+    """Convert minutes to HH:MM format (modulo 24 hours for overnight rollover)."""
+    norm = minutes % 1440
     h = norm // 60
     m = norm % 60
     return f"{h:02d}:{m:02d}"
@@ -115,37 +138,43 @@ class MaintenanceScheduler:
     ) -> List[Tuple[int, int, str]]:
         """
         Collect all occupied time intervals [start_mins, end_mins, description]
-        for the given location including safety buffers.
+        for the given location including safety buffers, supporting overnight
+        spans across target_date and next calendar day.
         """
         occupied: List[Tuple[int, int, str]] = []
+        next_date = target_date + timedelta(days=1)
+        prev_date = target_date - timedelta(days=1)
 
-        # 1. Check Passenger / Fixed Timetable stops
-        # Pair sequential timetable stops to form movement intervals
-        train_tts: Dict[str, List[TimetableRecord]] = {}
+        # 1. Check Passenger / Fixed Timetable stops on target_date and next_date
+        train_tts: Dict[Tuple[date, str], List[TimetableRecord]] = {}
         for tt in self.timetables:
-            if tt.service_date == target_date:
-                train_tts.setdefault(tt.train_id, []).append(tt)
+            if tt.service_date in (target_date, next_date):
+                train_tts.setdefault((tt.service_date, tt.train_id), []).append(tt)
 
-        for tid, stops in train_tts.items():
+        for (s_date, tid), stops in train_tts.items():
+            day_offset = (s_date - target_date).days * 1440
             stops_sorted = sorted(stops, key=lambda s: s.sequence)
-            for i, stop in enumerate(stops_sorted):
+            for stop in stops_sorted:
                 if _locations_match(stop.station_code, location):
                     arr = _parse_time_to_minutes(stop.arrival_time)
                     dep = _parse_time_to_minutes(stop.departure_time)
                     t_start = arr if arr is not None else (dep - 5 if dep is not None else 600)
                     t_end = dep if dep is not None else (arr + 5 if arr is not None else 605)
-                    start_buf = max(0, t_start - self.buffer_minutes)
-                    end_buf = min(1439, t_end + self.buffer_minutes)
+                    start_buf = max(0, day_offset + t_start - self.buffer_minutes)
+                    end_buf = day_offset + t_end + self.buffer_minutes
                     occupied.append((start_buf, end_buf, f"Train {tid} at {stop.station_code}"))
 
         # 2. Check Goods Train Forecasts
         for fc in self.goods_forecasts:
-            if fc.service_date == target_date and _locations_match(fc.section, location):
+            if fc.service_date in (target_date, next_date) and _locations_match(fc.section, location):
+                day_offset = (fc.service_date - target_date).days * 1440
                 f_start = _parse_time_to_minutes(fc.forecasted_entry)
                 f_end = _parse_time_to_minutes(fc.forecasted_exit)
                 if f_start is not None and f_end is not None:
-                    start_buf = max(0, f_start - self.buffer_minutes)
-                    end_buf = min(1439, f_end + self.buffer_minutes)
+                    if f_end < f_start:
+                        f_end += 1440
+                    start_buf = max(0, day_offset + f_start - self.buffer_minutes)
+                    end_buf = day_offset + f_end + self.buffer_minutes
                     occupied.append((start_buf, end_buf, f"Goods Forecast {fc.train_id} ({fc.section})"))
 
         # 3. Check Active Movements
@@ -154,18 +183,26 @@ class MaintenanceScheduler:
                 m_start = _parse_time_to_minutes(m.entry_time)
                 m_end = _parse_time_to_minutes(m.exit_time)
                 if m_start is not None and m_end is not None:
+                    if m_end < m_start:
+                        m_end += 1440
                     start_buf = max(0, m_start - self.buffer_minutes)
-                    end_buf = min(1439, m_end + self.buffer_minutes)
+                    end_buf = m_end + self.buffer_minutes
                     occupied.append((start_buf, end_buf, f"Movement {m.train_id} ({m.section})"))
 
         # 4. Check Approved Existing Blocks
         for b in self.block_records:
-            if b.requested_date == target_date and b.status == BlockStatus.APPROVED:
-                if _locations_match(b.location, location):
-                    b_start = _parse_time_to_minutes(b.requested_start)
-                    b_end = _parse_time_to_minutes(b.requested_end)
-                    if b_start is not None and b_end is not None:
-                        occupied.append((b_start, b_end, f"Approved Block {b.block_id}"))
+            if b.status == BlockStatus.APPROVED and _locations_match(b.location, location):
+                b_start = _parse_time_to_minutes(b.requested_start)
+                b_end = _parse_time_to_minutes(b.requested_end)
+                if b_start is not None and b_end is not None:
+                    dur = _calculate_duration_minutes(b.requested_start, b.requested_end)
+                    if b.requested_date == target_date:
+                        occupied.append((b_start, b_start + dur, f"Approved Block {b.block_id}"))
+                    elif b.requested_date == next_date:
+                        occupied.append((1440 + b_start, 1440 + b_start + dur, f"Next Day Approved Block {b.block_id}"))
+                    elif b.requested_date == prev_date:
+                        if b_start + dur > 1440:
+                            occupied.append((0, (b_start + dur) - 1440, f"Previous Day Approved Block {b.block_id}"))
 
         # Merge overlapping intervals
         if not occupied:
@@ -195,21 +232,28 @@ class MaintenanceScheduler:
         max_slots: int = 5,
     ) -> List[FeasibleSlot]:
         """
-        Identify free time windows on the target date satisfying the requested duration.
+        Identify free time windows on the target date satisfying the requested duration,
+        supporting continuous overnight windows crossing midnight up to early morning (08:00).
         """
+        if duration_minutes <= 0 or duration_minutes > 1440:
+            return []
+
         occupied = self._build_location_occupancy(target_date, location)
         pref_mins = _parse_time_to_minutes(preferred_start) or 600
+
+        # Timeline limit covers target_date (1440) plus early morning window up to 08:00 (480 mins)
+        timeline_limit = 1440 + min(duration_minutes, 480)
 
         free_windows: List[Tuple[int, int]] = []
         current_cursor = 0
 
         for occ_start, occ_end, _ in occupied:
             if occ_start > current_cursor:
-                free_windows.append((current_cursor, occ_start))
+                free_windows.append((current_cursor, min(timeline_limit, occ_start)))
             current_cursor = max(current_cursor, occ_end)
 
-        if current_cursor < 1440:
-            free_windows.append((current_cursor, 1440))
+        if current_cursor < timeline_limit:
+            free_windows.append((current_cursor, timeline_limit))
 
         # Filter windows that can accommodate the required duration
         candidate_slots: List[FeasibleSlot] = []
@@ -218,9 +262,8 @@ class MaintenanceScheduler:
         for w_start, w_end in free_windows:
             window_len = w_end - w_start
             if window_len >= duration_minutes:
-                # Discretize valid sub-slots or align with preferred start
-                # Check if preferred start fits directly inside this window
-                if w_start <= pref_mins and (pref_mins + duration_minutes) <= w_end:
+                # 1. Check if preferred start fits directly inside this window
+                if w_start <= pref_mins and (pref_mins + duration_minutes) <= min(w_end, timeline_limit) and pref_mins < 1440:
                     s_start = pref_mins
                     s_end = pref_mins + duration_minutes
                     is_match = True
@@ -238,28 +281,10 @@ class MaintenanceScheduler:
                     candidate_slots.append(slot)
                     slot_idx += 1
 
-                # Also add window start slot
-                s_start = w_start
-                s_end = w_start + duration_minutes
-                dist = abs(s_start - pref_mins)
-                fit = max(0.1, round(1.0 - (dist / 1440.0), 3))
-                slot = FeasibleSlot(
-                    slot_id=f"SLOT-{slot_idx:03d}",
-                    location=location,
-                    service_date=target_date,
-                    start_time=_format_minutes_to_time(s_start),
-                    end_time=_format_minutes_to_time(s_end),
-                    duration_minutes=duration_minutes,
-                    fit_score=fit,
-                    is_preferred_match=(dist <= 15),
-                )
-                candidate_slots.append(slot)
-                slot_idx += 1
-
-                # If window is large enough, also add an end-aligned slot
-                if window_len > duration_minutes + 30:
-                    s_start = w_end - duration_minutes
-                    s_end = w_end
+                # 2. Also add window start slot (must start on target_date and end within timeline)
+                if w_start < 1440 and (w_start + duration_minutes) <= timeline_limit:
+                    s_start = w_start
+                    s_end = w_start + duration_minutes
                     dist = abs(s_start - pref_mins)
                     fit = max(0.1, round(1.0 - (dist / 1440.0), 3))
                     slot = FeasibleSlot(
@@ -275,11 +300,31 @@ class MaintenanceScheduler:
                     candidate_slots.append(slot)
                     slot_idx += 1
 
+                # 3. If window is large enough, also add an end-aligned slot (must start on target_date)
+                if window_len > duration_minutes + 30:
+                    s_start = w_end - duration_minutes
+                    s_end = w_end
+                    if 0 <= s_start < 1440:
+                        dist = abs(s_start - pref_mins)
+                        fit = max(0.1, round(1.0 - (dist / 1440.0), 3))
+                        slot = FeasibleSlot(
+                            slot_id=f"SLOT-{slot_idx:03d}",
+                            location=location,
+                            service_date=target_date,
+                            start_time=_format_minutes_to_time(s_start),
+                            end_time=_format_minutes_to_time(s_end),
+                            duration_minutes=duration_minutes,
+                            fit_score=fit,
+                            is_preferred_match=(dist <= 15),
+                        )
+                        candidate_slots.append(slot)
+                        slot_idx += 1
+
         # Deduplicate and sort by fit_score descending
         seen_times = set()
         unique_slots: List[FeasibleSlot] = []
         for s in sorted(candidate_slots, key=lambda x: x.fit_score, reverse=True):
-            key = (s.start_time, s.end_time)
+            key = (s.start_time, s.end_time, s.duration_minutes)
             if key not in seen_times:
                 seen_times.add(key)
                 unique_slots.append(s)
@@ -328,9 +373,7 @@ class MaintenanceScheduler:
                     continue
                 if location_filter and location_filter.lower() not in b.location.lower():
                     continue
-                start_mins = _parse_time_to_minutes(b.requested_start) or 480
-                end_mins = _parse_time_to_minutes(b.requested_end) or 600
-                dur = max(30, end_mins - start_mins)
+                dur = _calculate_duration_minutes(b.requested_start, b.requested_end)
                 requests_to_schedule.append({
                     "type": "block",
                     "id": b.block_id,
@@ -341,6 +384,7 @@ class MaintenanceScheduler:
                     "duration": dur,
                     "preferred_start": b.requested_start,
                 })
+
 
         # Sort requests by priority (Critical first) and duration descending
         requests_to_schedule.sort(

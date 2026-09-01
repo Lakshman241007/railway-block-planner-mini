@@ -8,7 +8,7 @@ safety buffer violations, and resource contentions.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 import logging
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -19,6 +19,12 @@ from backend.app.scheduler.schemas import (
     ConflictSeverity,
     ConflictType,
     ScheduleResult,
+)
+from backend.app.scheduler.scheduler import (
+    _calculate_duration_minutes,
+    _format_minutes_to_time,
+    _locations_match,
+    _parse_time_to_minutes,
 )
 from backend.app.schemas.unified_data import (
     BlockRecord,
@@ -41,50 +47,10 @@ LOCATION_ALIASES = {
 }
 
 
-def _parse_time_to_minutes(time_val: Union[str, time, None]) -> Optional[int]:
-    """Convert time object or HH:MM string to minutes from midnight."""
-    if time_val is None:
-        return None
-    if isinstance(time_val, time):
-        return time_val.hour * 60 + time_val.minute
-    s = str(time_val).strip()
-    if not s or s in ("--", "None"):
-        return None
-    try:
-        parts = [int(p) for p in s.split(":")[:2]]
-        return parts[0] * 60 + parts[1]
-    except Exception:
-        return None
-
-
-def _format_minutes_to_time(minutes: int) -> str:
-    """Convert minutes from midnight to HH:MM format."""
-    norm = max(0, min(1439, minutes))
-    h = norm // 60
-    m = norm % 60
-    return f"{h:02d}:{m:02d}"
-
-
-def _locations_match(loc1: str, loc2: str) -> bool:
-    """Determine if two location/section descriptions refer to overlapping trackage."""
-    l1 = loc1.lower().strip()
-    l2 = loc2.lower().strip()
-    if l1 == l2:
-        return True
-    if l1 in l2 or l2 in l1:
-        return True
-
-    for corridor, aliases in LOCATION_ALIASES.items():
-        in_l1 = (corridor in l1) or any(a in l1 for a in aliases)
-        in_l2 = (corridor in l2) or any(a in l2 for a in aliases)
-        if in_l1 and in_l2:
-            return True
-    return False
-
-
 class ConflictDetector:
     """
-    Evaluates spatial-temporal conflicts across all railway domain entities.
+    Evaluates spatial-temporal conflicts across all railway domain entities,
+    accurately detecting overlaps and buffer compressions crossing midnight.
     """
 
     def __init__(
@@ -112,58 +78,67 @@ class ConflictDetector:
     ) -> ConflictReport:
         """
         Scan all active entities for operational conflicts on the target date.
+        Uses absolute minute offsets to correctly resolve overnight possessions.
         """
         c_date = target_date or date.today()
+        next_date = c_date + timedelta(days=1)
         conflicts: List[ConflictItem] = []
         conflict_idx = 1
 
-        # Extract blocks & maintenance windows to check
+        # Extract blocks & maintenance windows to check (with absolute minutes relative to c_date)
         block_windows: List[Dict] = []
 
         if proposed_schedule:
             for item in proposed_schedule.scheduled_items:
                 if item.assigned_slot:
                     s_min = _parse_time_to_minutes(item.assigned_slot.start_time)
-                    e_min = _parse_time_to_minutes(item.assigned_slot.end_time)
-                    if s_min is not None and e_min is not None:
+                    if s_min is not None:
+                        day_offset = (item.assigned_slot.service_date - c_date).days * 1440
+                        abs_s = day_offset + s_min
+                        abs_e = abs_s + item.requested_duration
                         block_windows.append({
                             "id": item.request_id,
                             "type": "ScheduledBlock",
                             "location": item.location,
-                            "start": s_min,
-                            "end": e_min,
+                            "start": abs_s,
+                            "end": abs_e,
                             "priority": item.priority,
                             "equipment": getattr(item, "equipment", None),
                         })
 
         # Also add un-scheduled requested maintenance records
         for m in self.maintenance_records:
-            if m.requested_date == c_date and m.maintenance_required:
+            if m.requested_date in (c_date, next_date) and m.maintenance_required:
                 p_start = _parse_time_to_minutes(m.preferred_start)
                 if p_start is not None:
-                    p_end = p_start + m.duration_minutes
+                    day_offset = (m.requested_date - c_date).days * 1440
+                    abs_s = day_offset + p_start
+                    abs_e = abs_s + m.duration_minutes
                     block_windows.append({
                         "id": m.asset_id,
                         "type": "MaintenanceRequest",
                         "location": m.location,
-                        "start": p_start,
-                        "end": p_end,
+                        "start": abs_s,
+                        "end": abs_e,
                         "priority": m.priority,
                         "equipment": m.equipment,
                     })
 
         # Add block records
         for b in self.block_records:
-            if b.requested_date == c_date and b.status != BlockStatus.CANCELLED:
+            if b.requested_date in (c_date, next_date) and b.status != BlockStatus.CANCELLED:
                 b_start = _parse_time_to_minutes(b.requested_start)
-                b_end = _parse_time_to_minutes(b.requested_end)
-                if b_start is not None and b_end is not None:
+                if b_start is not None:
+                    dur = _calculate_duration_minutes(b.requested_start, b.requested_end)
+                    day_offset = (b.requested_date - c_date).days * 1440
+                    abs_s = day_offset + b_start
+                    abs_e = abs_s + dur
                     block_windows.append({
                         "id": b.block_id,
                         "type": "BlockRequest",
                         "location": b.location,
-                        "start": b_start,
-                        "end": b_end,
+                        "start": abs_s,
+                        "end": abs_e,
                         "priority": b.priority,
                         "equipment": None,
                     })
@@ -171,18 +146,21 @@ class ConflictDetector:
         # -------------------------------------------------------------
         # 1. Check Train-Block Conflicts against Timetable stops
         # -------------------------------------------------------------
-        tt_stops = [tt for tt in self.timetables if tt.service_date == c_date]
+        tt_stops = [tt for tt in self.timetables if tt.service_date in (c_date, next_date)]
         for tt in tt_stops:
+            day_offset = (tt.service_date - c_date).days * 1440
             arr = _parse_time_to_minutes(tt.arrival_time)
             dep = _parse_time_to_minutes(tt.departure_time)
             t_start = arr if arr is not None else (dep - 5 if dep is not None else 600)
             t_end = dep if dep is not None else (arr + 5 if arr is not None else 605)
+            abs_t_start = day_offset + t_start
+            abs_t_end = day_offset + t_end
 
             for blk in block_windows:
                 if _locations_match(tt.station_code, blk["location"]):
                     # Check direct overlap
-                    overlap_start = max(t_start, blk["start"])
-                    overlap_end = min(t_end, blk["end"])
+                    overlap_start = max(abs_t_start, blk["start"])
+                    overlap_end = min(abs_t_end, blk["end"])
                     if overlap_start < overlap_end:
                         overlap_dur = overlap_end - overlap_start
                         conflicts.append(ConflictItem(
@@ -199,44 +177,52 @@ class ConflictDetector:
                             entity2_type=blk["type"],
                             entity2_id=blk["id"],
                             description=f"Train {tt.train_id} scheduled at {tt.station_code} overlaps with {blk['type']} {blk['id']}.",
-                            suggested_action=f"Shift {blk['type']} {blk['id']} to clear interval after {_format_minutes_to_time(t_end + 15)}.",
+                            suggested_action=f"Shift {blk['type']} {blk['id']} to clear interval after {_format_minutes_to_time(abs_t_end + 15)}.",
                         ))
                         conflict_idx += 1
                     # Check safety buffer violation
-                    elif abs(blk["start"] - t_end) < self.buffer_minutes or abs(t_start - blk["end"]) < self.buffer_minutes:
-                        buf_gap = min(abs(blk["start"] - t_end), abs(t_start - blk["end"]))
-                        conflicts.append(ConflictItem(
-                            conflict_id=f"CONF-{conflict_idx:04d}",
-                            conflict_type=ConflictType.SAFETY_BUFFER_VIOLATION,
-                            severity=ConflictSeverity.LOW,
-                            location=blk["location"],
-                            service_date=c_date,
-                            start_time=_format_minutes_to_time(min(t_start, blk["start"])),
-                            end_time=_format_minutes_to_time(max(t_end, blk["end"])),
-                            overlap_minutes=self.buffer_minutes - buf_gap,
-                            entity1_type="Train",
-                            entity1_id=tt.train_id,
-                            entity2_type=blk["type"],
-                            entity2_id=blk["id"],
-                            description=f"Train {tt.train_id} passes within {buf_gap} min (< {self.buffer_minutes} min safety buffer) of {blk['type']} {blk['id']}.",
-                            suggested_action=f"Increase clearance gap to minimum {self.buffer_minutes} minutes.",
-                        ))
-                        conflict_idx += 1
+                    else:
+                        gap_before = blk["start"] - abs_t_end
+                        gap_after = abs_t_start - blk["end"]
+                        if (0 <= gap_before < self.buffer_minutes) or (0 <= gap_after < self.buffer_minutes):
+                            buf_gap = min(gap_before if gap_before >= 0 else 9999, gap_after if gap_after >= 0 else 9999)
+                            conflicts.append(ConflictItem(
+                                conflict_id=f"CONF-{conflict_idx:04d}",
+                                conflict_type=ConflictType.SAFETY_BUFFER_VIOLATION,
+                                severity=ConflictSeverity.LOW,
+                                location=blk["location"],
+                                service_date=c_date,
+                                start_time=_format_minutes_to_time(min(abs_t_start, blk["start"])),
+                                end_time=_format_minutes_to_time(max(abs_t_end, blk["end"])),
+                                overlap_minutes=self.buffer_minutes - buf_gap,
+                                entity1_type="Train",
+                                entity1_id=tt.train_id,
+                                entity2_type=blk["type"],
+                                entity2_id=blk["id"],
+                                description=f"Train {tt.train_id} passes within {buf_gap} min (< {self.buffer_minutes} min safety buffer) of {blk['type']} {blk['id']}.",
+                                suggested_action=f"Increase clearance gap to minimum {self.buffer_minutes} minutes.",
+                            ))
+                            conflict_idx += 1
 
         # -------------------------------------------------------------
         # 2. Check Train-Block Conflicts against Goods Forecasts
         # -------------------------------------------------------------
         for fc in self.goods_forecasts:
-            if fc.service_date == c_date:
+            if fc.service_date in (c_date, next_date):
+                day_offset = (fc.service_date - c_date).days * 1440
                 f_start = _parse_time_to_minutes(fc.forecasted_entry)
                 f_end = _parse_time_to_minutes(fc.forecasted_exit)
                 if f_start is None or f_end is None:
                     continue
+                if f_end < f_start:
+                    f_end += 1440
+                abs_f_start = day_offset + f_start
+                abs_f_end = day_offset + f_end
 
                 for blk in block_windows:
                     if _locations_match(fc.section, blk["location"]):
-                        overlap_start = max(f_start, blk["start"])
-                        overlap_end = min(f_end, blk["end"])
+                        overlap_start = max(abs_f_start, blk["start"])
+                        overlap_end = min(abs_f_end, blk["end"])
                         if overlap_start < overlap_end:
                             overlap_dur = overlap_end - overlap_start
                             sev = ConflictSeverity.HIGH if blk["priority"] in (Priority.CRITICAL, Priority.HIGH) else ConflictSeverity.MEDIUM
@@ -341,3 +327,4 @@ class ConflictDetector:
             is_conflict_free=(len(conflicts) == 0),
             conflicts=conflicts,
         )
+

@@ -7,7 +7,7 @@ Coordinates the end-to-end Phase 4 workflow:
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import logging
 from typing import List, Optional
 import uuid
@@ -23,6 +23,8 @@ from backend.app.database.repositories import (
 )
 from backend.app.forecast.forecast import GoodsTrainForecaster
 from backend.app.forecast.schemas import GoodsForecastItem, GoodsForecastResult
+from backend.app.optimizer.cp_sat_optimizer import CP_SAT_Optimizer
+from backend.app.optimizer.schemas import OptimizationRequest, OptimizationResult
 from backend.app.scheduler.auto_resolver import AutoResolver
 from backend.app.scheduler.conflict_detector import ConflictDetector
 from backend.app.scheduler.scheduler import MaintenanceScheduler
@@ -40,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 class BlockPlanner:
     """
-    Unified planning facade executing the Phase 4 pipeline.
+    Unified planning facade executing the Phase 4 & Phase 5 pipelines.
     """
 
     def __init__(
@@ -81,7 +83,7 @@ class BlockPlanner:
 
     def generate_plan(self, request: Optional[BlockPlanRequest] = None) -> BlockPlanResult:
         """
-        Execute end-to-end block planning for the requested date.
+        Execute end-to-end Phase 4 block planning for the requested date.
         """
         req = request or BlockPlanRequest()
         target_d = req.target_date or date.today()
@@ -157,3 +159,37 @@ class BlockPlanner:
             conflict_report=conflict_report,
             resolution_recommendations=resolutions,
         )
+
+    def optimize_plan(self, request: Optional[OptimizationRequest] = None) -> OptimizationResult:
+        """
+        Execute end-to-end Phase 5 CP-SAT mathematical optimization:
+        Forecast → Multi-Day Candidate Slots → CP-SAT Optimizer.
+        """
+        req = request or OptimizationRequest()
+        target_d = req.target_date or date.today()
+
+        self._ensure_data_loaded()
+
+        forecast_items: List[GoodsForecastItem] = []
+        if req.include_forecast:
+            forecaster = GoodsTrainForecaster(
+                trains=self.trains,
+                movements=self.movements,
+                timetables=self.timetables,
+            )
+            # Forecast across the horizon days
+            for d_offset in range(req.horizon_days):
+                day_date = target_d + timedelta(days=d_offset)
+                fc_res = forecaster.predict(target_date=day_date, horizon_hours=24)
+                forecast_items.extend(fc_res.forecasts)
+
+        optimizer = CP_SAT_Optimizer(
+            maintenance_records=self.maintenance_records,
+            block_records=self.block_records,
+            timetables=self.timetables,
+            goods_forecasts=forecast_items,
+            movements=self.movements,
+        )
+
+        return optimizer.optimize(request=req)
+

@@ -1,0 +1,51 @@
+# ==============================================================================
+# Railway Block Planner — Constraints & Optimization Configuration (Phase 5)
+#
+# PROTOTYPE DISCLAIMER:
+# Optimization rules, buffer intervals, resource capacities, and objective weights
+# are prototype assumptions for the hackathon demonstration and are NOT official
+# Indian Railways operating rules or policies.
+# ==============================================================================
+
+# Planning Horizon defaults
+horizon:
+  default_horizon_days: 7
+  max_horizon_days: 30
+
+# Safety & Headway buffers
+safety:
+  buffer_minutes: 15
+  min_block_duration_minutes: 30
+  max_block_duration_minutes: 720
+
+# Resource / Specialized Equipment Capacities
+# Maximum concurrent operations allowed for each equipment type in the division
+resource_capacities:
+  "Track Tamper": 1
+  "Overhead Line Inspection Vehicle": 1
+  "OHE Car": 1
+  "Signal Testing Unit": 1
+  "Ballast Cleaner": 1
+  "Rail Crane": 1
+  "Tower Wagon": 2
+  "Welding Unit": 2
+  "General": 5
+
+# CP-SAT Multi-Objective Weights
+# Maximize: sum(W_scheduled + W_priority[p] - W_deviation * abs(start - pref) - W_disruption * (1 - fit))
+objective_weights:
+  weight_scheduled: 10000
+  weight_priority_critical: 5000
+  weight_priority_high: 2500
+  weight_priority_medium: 1000
+  weight_priority_low: 200
+  weight_preferred_deviation: 5        # penalty per minute of deviation from preferred start
+  weight_disruption: 50                 # penalty for slot fit degradation
+  weight_resource_contention: 100       # penalty multiplier for high-resource jobs
+
+# OR-Tools CP-SAT Solver Settings
+solver:
+  time_limit_seconds: 30.0
+  num_workers: 4
+  random_seed: 42
+  log_search_progress: false
