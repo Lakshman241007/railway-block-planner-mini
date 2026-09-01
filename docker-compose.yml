@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  # Optional PostgreSQL container for persistent storage
+  db:
+    image: postgres:16-alpine
+    container_name: railway_block_planner_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: railway_block_planner
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d railway_block_planner"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend Application Service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: railway_block_planner_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/railway_block_planner
+      PORT: 8000
+      HOST: 0.0.0.0
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

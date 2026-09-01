@@ -130,12 +130,104 @@ python -m backend.app.data_integration.integrator --phase1
 pytest backend/tests/ -v
 ```
 
-### Project Structure (Phase 2)
+---
+
+## Phase 3 — Database + Repositories + FastAPI (Current)
+
+Phase 3 persists the unified multi-source dataset into a relational database via SQLAlchemy and exposes the domain entities through FastAPI RESTful API endpoints.
+
+```text
+PHASE 3 ARCHITECTURE
+====================
+
+         Phase 2 Integration Output
+                     ↓
+           RailwayDataIntegrator
+                     ↓
+            Unified Domain Data
+                     ↓
+         ┌───────────────────────┐
+         │   Repository Layer    │
+         │ (CRUD & Query logic)  │
+         └───────────┬───────────┘
+                     ↓
+         ┌───────────────────────┐
+         │  SQLAlchemy Database  │
+         │ (SQLite / PostgreSQL) │
+         │   • Trains            │
+         │   • Maintenance       │
+         │   • Movements         │
+         │   • Blocks            │
+         │   • Timetable         │
+         └───────────┬───────────┘
+                     ↓
+         ┌───────────────────────┐
+         │  FastAPI REST Server  │
+         └───────────┬───────────┘
+                     ↓
+  ┌──────────────┬───┴──────────┬──────────────┐
+  ▼              ▼              ▼              ▼
+Trains     Maintenance        Blocks         Plans
+ API            API            API            API
+```
+
+### Key Components
+
+- **Database Models (`backend/app/database/models.py`)**: Persistent SQLAlchemy ORM representations of `Train`, `Maintenance`, `Movement`, `Block`, and `Timetable` entities mapped directly from Phase 2 canonical schemas.
+- **Repository Layer (`backend/app/database/repositories.py`)**: Encapsulated data access objects (`TrainRepository`, `MaintenanceRepository`, `MovementRepository`, `BlockRepository`, `TimetableRepository`) with CRUD, filtering, pagination, and specialized queries.
+- **Database Seeding CLI (`backend/app/database/seed.py`)**: Automated pipeline execution feeding Phase 2 `RailwayDataIntegrator` outputs into database tables idempotently.
+- **FastAPI Application (`backend/app/main.py`)**: REST server providing CORS, lifespan management, health checks, dependency injection, and interactive Swagger documentation at `/docs`.
+- **REST Endpoints (`backend/app/api/routes/`)**:
+  - `GET /health` — Service health & database connectivity
+  - `GET /api/trains` & `GET /api/trains/{train_id}` — Query train status & route metadata
+  - `GET /api/maintenance` & `GET /api/maintenance/{asset_id}` — Query maintenance requirements & priorities
+  - `GET /api/blocks` & `GET /api/blocks/{block_id}` — Query track disconnection requests
+  - `GET /api/plans` — Read-only persistent block plan view
+
+### Running Phase 3
+
+#### 1. Seed Database
+
+```bash
+python -m backend.app.database.seed
+```
+
+To drop and recreate all tables before seeding:
+
+```bash
+python -m backend.app.database.seed --reset
+```
+
+#### 2. Start FastAPI Server
+
+```bash
+uvicorn backend.app.main:app --reload
+```
+
+Interactive API documentation (Swagger UI) is available at:
+```text
+http://localhost:8000/docs
+```
+
+#### 3. Run Tests
+
+```bash
+pytest backend/tests/ -v
+```
+
+### Project Structure (Phase 3)
 
 ```text
 railway-block-planner/
 ├── backend/
 │   ├── app/
+│   │   ├── api/
+│   │   │   ├── routes/
+│   │   │   │   ├── blocks.py
+│   │   │   │   ├── maintenance.py
+│   │   │   │   ├── plans.py
+│   │   │   │   └── trains.py
+│   │   │   └── dependencies.py
 │   │   ├── data_integration/
 │   │   │   ├── collectors/
 │   │   │   │   ├── smms_collector.py
@@ -156,8 +248,14 @@ railway-block-planner/
 │   │   │   ├── merger.py
 │   │   │   ├── conflict_resolver.py
 │   │   │   └── integrator.py
-│   │   └── schemas/
-│   │       └── unified_data.py
+│   │   ├── database/
+│   │   │   ├── connection.py
+│   │   │   ├── models.py
+│   │   │   ├── repositories.py
+│   │   │   └── seed.py
+│   │   ├── schemas/
+│   │   │   └── unified_data.py
+│   │   └── main.py
 │   └── tests/
 │       ├── test_collectors.py
 │       ├── test_validators.py
@@ -165,7 +263,11 @@ railway-block-planner/
 │       ├── test_entity_mapper.py
 │       ├── test_merger.py
 │       ├── test_conflict_resolver.py
-│       └── test_integrator.py
+│       ├── test_integrator.py
+│       ├── test_database.py
+│       ├── test_repositories.py
+│       ├── test_seed.py
+│       └── test_api.py
 ├── data/
 │   └── raw/
 │       ├── smms/mock_smms.csv
@@ -176,5 +278,7 @@ railway-block-planner/
 │       └── timetable/mock_timetable.csv
 ├── config/
 │   └── source_config.yaml
+├── .env.example
+├── docker-compose.yml
 └── requirements.txt
 ```

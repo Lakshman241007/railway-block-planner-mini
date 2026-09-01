@@ -8,3 +8,4 @@ ortools
 python-multipart
 PyYAML
 pytest
+httpx
